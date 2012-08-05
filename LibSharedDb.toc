@@ -1,0 +1,14 @@
+## Title: LibSharedDb
+## Notes: Shared Database Library
+## Version: 1.0
+## Author: FH
+## Interface: 30000
+## SavedVariablesPerCharacter: LibSharedDb_Data
+
+libs\AceSerializer-3.0\AceSerializer-3.0.xml
+libs\AceTimer-3.0\AceTimer-3.0.xml
+libs\ChatThrottleLib\ChatThrottleLib.xml
+libs\LibDebug\LibDebug.xml
+libs\LibStub\LibStub.xml
+
+SharedDb.lua
