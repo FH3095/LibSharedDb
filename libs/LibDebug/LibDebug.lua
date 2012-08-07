@@ -76,25 +76,32 @@ function Lib:ConvertToText(Data)
 end
 
 function Lib:Debug(DebugLevel, ...)
-	if self.DebugLevel >= DebugLevel and LibDbg.DebugChatFrame ~= nil then
-		local OutText = ""
-
-		local FirstArg = true
-		for i = 1, select("#", ...) do
-			local Temp = self:ConvertToText(select(i, ...))
-			if FirstArg == false then
-				OutText = OutText .. " , "
-			end
-			FirstArg = false
-			OutText = OutText .. Temp
-		end
-
-		LibDbg.DebugChatFrame:AddMessage("|cff00ff9a" .. self.ChatPrefix .. ":|r " .. OutText, 0.4588, 0.7843, 1)
+	if self:IsLogging(DebugLevel) ~= true then
+		return
 	end
+
+	local OutText = ""
+
+	local FirstArg = true
+	local NumArgs = select("#", ...)
+	for i = 1, NumArgs do
+		local Temp = self:ConvertToText(select(i, ...))
+		if FirstArg == false then
+			OutText = OutText .. " , "
+		end
+		FirstArg = false
+		OutText = OutText .. Temp
+	end
+
+	LibDbg.DebugChatFrame:AddMessage("|cff00ff9a" .. self.ChatPrefix .. ":|r " .. OutText, 0.4588, 0.7843, 1)
+end
+
+function Lib:IsLogging(DebugLevel)
+	return self.DebugLevel >= DebugLevel and LibDbg.DebugChatFrame ~= nil
 end
 
 function Lib:Embed(Target)
-	local MixIns = {"ConvertToText","OutputDebug","Debug","DebugLevel","ChatPrefix"}
+	local MixIns = {"ConvertToText","IsLogging","Debug","DebugLevel","ChatPrefix"}
 	for _,name in pairs(MixIns) do
 		Target[name] = self[name]
 	end

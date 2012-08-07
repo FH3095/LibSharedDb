@@ -3,7 +3,7 @@
 ## Version: 1.0
 ## Author: FH
 ## Interface: 30000
-## SavedVariablesPerCharacter: LibSharedDb_Data
+## SavedVariables: LibSharedDb_Data, LibSharedDb_Config
 
 libs\AceSerializer-3.0\AceSerializer-3.0.xml
 libs\AceTimer-3.0\AceTimer-3.0.xml
