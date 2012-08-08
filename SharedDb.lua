@@ -480,8 +480,10 @@ function Lib:HandleCommand(msg,editbox)
 		else
 			local text = "My twinks are: "
 			local twinks = Ext:GetTwinks(chan)
-			for twink,val in pairs(twinks) do
-				text = text .. twinks .. ", "
+			if twinks ~= nil then
+				for twink,val in pairs(twinks) do
+					text = text .. twink .. ", "
+				end
 			end
 			print(text)
 		end
