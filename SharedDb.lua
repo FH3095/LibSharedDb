@@ -120,7 +120,7 @@ function Lib:CHAT_MSG_CHANNEL(message,sender,language,channelString,_,flags,_,ch
 end
 
 function Lib:CHAT_MSG_ADDON(prefix, message, channel, sender)
-	local chan = self.Const.VirtChanTranslate[channel]
+	local chan = self:TranslateVirtChan(channel)
 	if prefix ~= self.Const.ChatPrefix or
 		sender == self.Const.SelfPlayerName or
 		chan == nil then
@@ -354,6 +354,11 @@ function Lib:IsTwinkOf(chan,twink,main)
 	return false
 end
 
+function Lib:TranslateVirtChan(chan)
+	local UpperChan = chan:upper()
+	return self.Const.VirtChanTranslate[UpperChan]
+end
+
 function Lib:CreateChannelEntry(chan)
 	if self:ExistsChannelEntry(chan) == true then
 		return
@@ -399,6 +404,97 @@ function Lib:ExistsUserPrefixEntry(chan,user,prefix)
 	end
 	return false
 end
+
+-- ## Slash Command ## --
+
+SLASH_LIBSHAREDDB1 = "/libshareddb"
+SLASH_LIBSHAREDDB2 = "/lsdb"
+
+function Lib:HandleCommand(msg,editbox)
+	local function _PrintHelp()
+		print("LibSharedDb Help")
+		print("Commands: /libshareddb or /lsdb")
+		print("/lsdb setmain <chan> <main>")
+		print("Sets the main-character for this character in channel chan.")
+		print("/lsdb addtwink <chan> <twink>")
+		print("Adds twink as twink for current character in channel chan.")
+		print("/lsdb deltwink <chan> <twink>")
+		print("Removes twink as twink for current character in channel chan.")
+		print("TAKE CARE: setmain, addtwink and deltwink is case-sensetive concerning character names.")
+		print("/lsdb showmain <chan>")
+		print("Shows main character for channel chan.")
+		print("/lsdb showtwinks <chan>")
+		print("Shows twinks for channel chan.")
+	end
+	local tmp = msg:gsub("^%s*(.-)%s*$", "%1")
+	tmp = tmp:gsub("(%s+)"," ")
+	local cmd = split(msg," ",-1,true)
+	cmd[1] = cmd[1]:lower()
+	if cmd[1] == "setmain" and cmd[2] ~= nil and cmd[2] ~= "" then
+		local chan = self:TranslateVirtChan(cmd[2])
+		if chan == nil then
+			chan = cmd[2]
+		end
+		if cmd[3] == nil or cmd[3] == "" then
+			cmd[3] = self.Const.SelfPlayerName
+		end
+		if Ext:SetMyMain(chan,cmd[3]) == true then
+			print("Set Main for " .. self.Const.SelfPlayerName .. " to " .. cmd[3] .. ".")
+		else
+			print("Can't set Main. No channel " .. chan .. "?")
+		end
+	elseif (cmd[1] == "addtwink" or cmd[1] == "deltwink") and
+	  cmd[3] ~= nil and cmd[2] ~= "" and cmd[3] ~= "" then
+		local chan = self:TranslateVirtChan(cmd[2])
+		if chan == nil then
+			chan = cmd[2]
+		end
+		local res = false
+		if cmd[1] == "addtwink" then
+			res = Ext:AddTwink(chan,cmd[3])
+		elseif cmd[1] == "deltwink" then
+			res = Ext:DelTwink(chan,cmd[3])
+		else
+			error("Neither addtwink nor deltwink oO")
+		end
+		if res == true then
+			local text = cmd[3] .. " was "
+			if cmd[1] == "addtwink" then
+				text = text .. "added "
+			else
+				test = text .. "removed "
+			end
+			text = text .. "as twink from " .. self.Const.SelfPlayerName
+			print(text)
+		else
+			print("Can't add or remove twink " .. cmd[3] .. ". Does channel " .. chan .. " exists?")
+		end
+	elseif (cmd[1] == "showmain" or cmd[1] == "showtwinks") and
+	  cmd[2] ~= nil and cmd[2] ~= "" then
+		local chan = self:TranslateVirtChan(cmd[2])
+		if chan == nil then
+			chan = cmd[2]
+		end
+		if cmd[1] == "showmain" then
+			print("My main is: " .. Ext:GetMain(chan,self.Const.SelfPlayerName))
+		else
+			local text = "My twinks are: "
+			local twinks = Ext:GetTwinks(chan)
+			for twink,val in pairs(twinks) do
+				text = text .. twinks .. ", "
+			end
+			print(text)
+		end
+	else
+		_PrintHelp()
+	end
+end
+
+function Lib.SlashCommand(msg,editbox)
+	Lib:HandleCommand(msg,editbox)
+end
+
+SlashCmdList["LIBSHAREDDB"] = Lib.SlashCommand
 
 --[[--
 function Lib:RecalcMergedData(chan,user)
@@ -524,11 +620,11 @@ function Ext:SetMyMain(chan,main)
 end
 
 function Ext:GetMain(chan,user)
-	if self:ExistsChannelEntry(chan) ~= true then
-		return nil
-	end
 	if user == nil then
 		user = Lib.Const.SelfPlayerName
+	end
+	if self:ExistsUserPrefixEntry(chan,user,Lib.Const.ConfigVersion) ~= true then
+		return user
 	end
 	return LibSharedDb_Data[chan]["Data"][user]["Data"][Lib.Const.ConfigVersion]["Main"]
 end
