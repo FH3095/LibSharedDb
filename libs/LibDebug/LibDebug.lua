@@ -68,6 +68,8 @@ function Lib:ConvertToText(Data)
 		else
 			return "false"
 		end
+	elseif type(Data) == "function" then
+		return "<function()>"
 	elseif Data == nil then
 		return "nil"
 	else

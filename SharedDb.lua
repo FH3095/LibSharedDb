@@ -3,6 +3,7 @@
 -- /script LibSharedDb_Data["LibSharedDb_Guild"]["Data"]["Regaro"]["Data"]["GCOM"]["Test"]="12345"
 -- /script LibStub:GetLibrary("LibSharedDb"):SetData("LibSharedDb_Guild","GCOM","12345")
 -- /script LibSharedDb_Data["LibSharedDb_Guild"]["Data"]["Neoran"]["Data"]={}
+-- /script local l=LibStub:GetLibrary("LibSharedDbPrivate");l.Dbg:Debug(0,l.Db,l.AceDb.factionrealm);
 local Lib = LibStub:NewLibrary("LibSharedDbPrivate", 1)
 local Ext = LibStub:NewLibrary("LibSharedDb", 1)
 
@@ -17,6 +18,7 @@ Lib.Frame = CreateFrame("Frame", "LibSharedDb")
 
 Lib.Buffer = {}
 Lib.ChangedDataHooks = {}
+Lib.LoadedCallbacks = {}
 
 Lib.Const = {}
 Lib.Const.SelfPlayerName = UnitName("player")
@@ -32,6 +34,7 @@ Lib.Config = {}
 Lib.Config.SendDataInterval = 15 -- Seconds
 Lib.Config.CleanupInterval = 60
 -- Lib.Config.StartupDelay = 30
+Lib.Config.TestInitReadyInterval = 1
 
 Ext.Const = {}
 Ext.Const.GuildChan = Lib.Const.GuildChan
@@ -57,6 +60,24 @@ local function split(str,delim,max,plain)
 	return ret
 end
 
+function Lib:InitReady()
+	local InitNow = true
+
+	local g = GetGuildInfo("player")
+
+	if g == nil then
+		InitNow = false
+	end
+	
+	if InitNow == true then
+		self:Init()
+	else
+		self.Timer:ScheduleTimer(self.InitReady,Lib.Config.TestInitReadyInterval,
+			self)
+		print("LibSharedDb: Waiting for data...")
+	end
+end
+
 function Lib:Init()
 	self.Dbg:Debug(LOG_LEVEL.NORMAL,"SharedDb:Init")
 	self.Timer:ScheduleRepeatingTimer(self.AdvertiseVersionAndSendData,
@@ -67,7 +88,7 @@ function Lib:Init()
 	  LibSharedDb_Config["Version"] ~= self.Const.ConfigVersion then
 		LibSharedDb_Data = {}
 		self.AceDb = LibStub:GetLibrary("AceDB-3.0"):New("LibSharedDb_Data", {})
-		self.Db = self.AceDb.factionrealm
+		self:SetDb()
 		LibSharedDb_Config = {}
 		LibSharedDb_Config["Version"] = self.Const.ConfigVersion
 	end
@@ -79,6 +100,11 @@ function Lib:Init()
 	self:Cleanup()
 	self.Frame:RegisterEvent("CHAT_MSG_CHANNEL")
 	self.Frame:RegisterEvent("CHAT_MSG_ADDON")
+	local Tmp = self.LoadedCallbacks
+	self.LoadedCallbacks = nil
+	for func,param in pairs(Tmp) do
+		func(param)
+	end
 end
 
 -- ## Events ## --
@@ -89,8 +115,8 @@ function Lib:ADDON_LOADED(...)
 		self.Frame:UnregisterEvent("ADDON_LOADED")
 		self.ADDON_LOADED = nil
 		self.AceDb = LibStub:GetLibrary("AceDB-3.0"):New("LibSharedDb_Data", {})
-		self.Db = self.AceDb.factionrealm
-		self:Init()
+		self:SetDb()
+		self:InitReady()
 		-- self.Timer:ScheduleTimer(self.Init,self.Config.StartupDelay,self)
 	end
 end
@@ -363,6 +389,14 @@ function Lib:TranslateVirtChan(chan)
 	return self.Const.VirtChanTranslate[UpperChan]
 end
 
+function Lib:SetDb()
+	local UsedDataType = "factionrealm"
+	if self.AceDb[UsedDataType] == nil then
+		self.AceDb[UsedDataType] = {}
+	end
+	self.Db = self.AceDb[UsedDataType]
+end
+
 function Lib:CreateChannelEntry(chan)
 	if self:ExistsChannelEntry(chan) == true then
 		return
@@ -542,6 +576,10 @@ local function deepcopy(object) -- http://lua-users.org/wiki/CopyTable
 	return _copy(object)
 end
 
+function Ext:JoinChannel(chan)
+	Lib:CreateUserEntry(chan,Lib.Const.SelfPlayerName)
+end
+
 function Ext:ExistsChannelEntry(chan)
 	return Lib:ExistsChannelEntry(chan)
 end
@@ -607,6 +645,17 @@ function Ext:SetChangedDataHook(func,param)
 	Lib.ChangedDataHooks[func] = param
 end
 
+function Ext:SetLoadedCallback(func,param,dontCallWhenAlreadyLoaded)
+	if Lib.LoadedCallbacks == nil then
+		if dontCallWhenAlreadyLoaded ~= true then
+			func(param)
+		end
+		return false
+	end
+	Lib.LoadedCallbacks[func] = param
+	return true
+end
+
 function Ext:SetMyMain(chan,main)
 	if self:ExistsChannelEntry(chan) ~= true then
 		return false
@@ -614,7 +663,6 @@ function Ext:SetMyMain(chan,main)
 	if main == nil then
 		main = Lib.Const.SelfPlayerName
 	end
-	Lib.Db = Lib.AceDb.factionrealm
 	Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Main"] = main
 	--[[--
 	for prefix,_ in pairs(Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"]) do
