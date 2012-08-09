@@ -60,7 +60,7 @@ local function split(str,delim,max,plain)
 	return ret
 end
 
-function Lib:InitReady()
+function Lib:InitWhenReady()
 	local InitNow = true
 
 	local g = GetGuildInfo("player")
@@ -72,7 +72,7 @@ function Lib:InitReady()
 	if InitNow == true then
 		self:Init()
 	else
-		self.Timer:ScheduleTimer(self.InitReady,Lib.Config.TestInitReadyInterval,
+		self.Timer:ScheduleTimer(self.InitWhenReady,Lib.Config.TestInitReadyInterval,
 			self)
 		print("LibSharedDb: Waiting for data...")
 	end
@@ -116,7 +116,7 @@ function Lib:ADDON_LOADED(...)
 		self.ADDON_LOADED = nil
 		self.AceDb = LibStub:GetLibrary("AceDB-3.0"):New("LibSharedDb_Data", {})
 		self:SetDb()
-		self:InitReady()
+		self:InitWhenReady()
 		-- self.Timer:ScheduleTimer(self.Init,self.Config.StartupDelay,self)
 	end
 end
