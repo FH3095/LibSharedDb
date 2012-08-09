@@ -68,10 +68,12 @@ function Lib:Init()
 	if LibSharedDb_Data == nil or LibSharedDb_Config == nil or
 	  LibSharedDb_Config["Version"] ~= self.Const.ConfigVersion then
 		LibSharedDb_Data = {}
+		self.AceDb = LibStub:GetLibrary("AceDB-3.0"):New("LibSharedDb_Data", {})
+		self.Db = self.AceDb.profile
 		LibSharedDb_Config = {}
 		LibSharedDb_Config["Version"] = self.Const.ConfigVersion
 	end
-	for chan,data in pairs(LibSharedDb_Data) do
+	for chan,data in pairs(self.Db) do
 		data["Config"]["ResendRequested"] = false
 		data["Config"]["SendingData"] = false
 		self:CreateUserEntry(chan,self.Const.SelfPlayerName)
@@ -86,6 +88,8 @@ function Lib:ADDON_LOADED(...)
 		self.Dbg:Debug(LOG_LEVEL.NORMAL,"ADDON_LOADED", ...)
 		self.Frame:UnregisterEvent("ADDON_LOADED")
 		self.ADDON_LOADED = nil
+		self.AceDb = LibStub:GetLibrary("AceDB-3.0"):New("LibSharedDb_Data", {})
+		self.Db = self.AceDb.profile
 		-- self:Init()
 		self.Timer:ScheduleTimer(self.Init,self.Config.StartupDelay,self)
 	end
@@ -104,15 +108,15 @@ function Lib:GUILD_ROSTER_UPDATE()
 		self.Dbg:Debug(LOG_LEVEL.ERROR,"GUILD_ROSTER_UPDATE, but GetGuildRosterInfo doesn't contain myself, skipping cleanup!")
 		return
 	end
-	for user,val in pairs(LibSharedDb_Data[self.Const.GuildChan]["Data"]) do
+	for user,val in pairs(self.Db[self.Const.GuildChan]["Data"]) do
 		if GuildMember[user] ~= true then
-			LibSharedDb_Data[self.Const.GuildChan]["Data"][user] = nil
+			self.Db[self.Const.GuildChan]["Data"][user] = nil
 			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Removing data for user " .. user .. 
 				" from channel " .. self.Const.GuildChan)
 		end
 	end
 	self.Frame:UnregisterEvent("GUILD_ROSTER_UPDATE")
-	LibSharedDb_Data[self.Const.GuildChan]["Config"]["NextCleanup"] = 
+	self.Db[self.Const.GuildChan]["Config"]["NextCleanup"] = 
 		time() + self.Config.CleanupInterval - 1
 end
 
@@ -136,10 +140,10 @@ function Lib:CHAT_MSG_ADDON(prefix, message, channel, sender)
 			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Requested new data from " .. sender)
 		end
 	elseif Data[1] == "REQ" and Data[2] == self:GetMyMain(chan) and
-	  LibSharedDb_Data[chan]["Config"]["SendingData"] ~= true then
+	  self.Db[chan]["Config"]["SendingData"] ~= true then
 		self.Dbg:Debug(LOG_LEVEL.NORMAL,"Data for channel " .. chan ..
 			" requested by " .. sender)
-		LibSharedDb_Data[chan]["Config"]["ResendRequested"] = true
+		self.Db[chan]["Config"]["ResendRequested"] = true
 	elseif Data[1] == "STADTA" then
 		local Tmp = split(Data[2],";",3,true)
 		if self:IsTwinkOf(chan,sender,Tmp[1]) then
@@ -160,7 +164,7 @@ end
 
 function Lib:NewerVersion(chan,sender,version)
 	if Ext:ExistsUserEntry(chan,sender) == false or
-	  LibSharedDb_Data[chan]["Data"][sender]["Config"]["Version"] ~= version then
+	  self.Db[chan]["Data"][sender]["Config"]["Version"] ~= version then
 		self.Dbg:Debug(LOG_LEVEL.NORMAL,"Found newer version " .. version .. 
 			" for data from " .. sender .. " in chan " .. chan)
 		return true
@@ -179,8 +183,8 @@ end
 function Lib:CleanupGuildChannel()
 	self.Frame:RegisterEvent("GUILD_ROSTER_UPDATE")
 	local function CallGuildRosterIfRequired()
-		if LibSharedDb_Data[self.Const.GuildChan]["Config"]["NextCleanup"] == nil or
-		   LibSharedDb_Data[self.Const.GuildChan]["Config"]["NextCleanup"] <= time() then
+		if self.Db[self.Const.GuildChan]["Config"]["NextCleanup"] == nil or
+		   self.Db[self.Const.GuildChan]["Config"]["NextCleanup"] <= time() then
 			GuildRoster()
 			self.Timer:ScheduleTimer(CallGuildRosterIfRequired,10)
 		end
@@ -210,7 +214,7 @@ function Lib:SendMessage(prio,target,content,callback,callbackparam)
 end
 
 function Lib:AdvertiseVersionAndSendData()
-	for chan,data in pairs(LibSharedDb_Data) do
+	for chan,data in pairs(self.Db) do
 		assert(data~=nil)
 		assert(data["Data"]~=nil)
 		local MainChar = self:GetMyMain(chan)
@@ -233,22 +237,22 @@ function Lib:AdvertiseVersionAndSendData()
 				self.Dbg:Debug(LOG_LEVEL.ERROR,"ResendRequested, but I have no data for myself!")
 			else
 				self:SendData(chan,MainChar)
-				LibSharedDb_Data[chan]["Config"]["ResendRequested"] = false
+				self.Db[chan]["Config"]["ResendRequested"] = false
 			end
 		end
 	end
 end
 
 function Lib:SendData(chan,user)
-	if LibSharedDb_Data[chan]["Config"]["SendingData"] == true then
+	if self.Db[chan]["Config"]["SendingData"] == true then
 		self.Dbg:Debug(LOG_LEVEL.NORMAL,"Already sending data to channel " .. chan)
 		return
 	end
-	LibSharedDb_Data[chan]["Config"]["SendingData"] = true
-	local Data = self.Serializer:Serialize(LibSharedDb_Data[chan]["Data"][user]["Data"])
+	self.Db[chan]["Config"]["SendingData"] = true
+	local Data = self.Serializer:Serialize(self.Db[chan]["Data"][user]["Data"])
 	self.Dbg:Debug(LOG_LEVEL.NORMAL,"Send to channel " .. chan .. " for user " .. user .. " data " .. Data)
 	local DataParts = {}
-	local Version = LibSharedDb_Data[chan]["Data"][user]["Config"]["Version"]
+	local Version = self.Db[chan]["Data"][user]["Config"]["Version"]
 	local Pos = 1
 	local MAX_DATA_LEN = 245
 	while Pos <= Data:len() do
@@ -268,7 +272,7 @@ function Lib:SendData(chan,user)
 end
 
 function Lib.SentData(chan)
-	LibSharedDb_Data[chan]["Config"]["SendingData"] = false
+	Lib.Db[chan]["Config"]["SendingData"] = false
 	Lib.Dbg:Debug(LOG_LEVEL.NORMAL,"Data sent to chan " .. chan)
 end
 
@@ -312,7 +316,7 @@ function Lib:EndNewData(chan,sender)
 	if data[self.Const.ConfigVersion]["Main"] ~= sender then
 		if self:IsTwinkOf(chan,sender,data[self.Const.ConfigVersion]["Main"]) == true then
 			owner = data[self.Const.ConfigVersion]["Main"]
-			LibSharedDb_Data[chan]["Data"][sender] = nil
+			self.Db[chan]["Data"][sender] = nil
 		else
 			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Refused to set owner of data to " ..
 				data[self.Const.ConfigVersion]["Main"] .. " because this char doesn't have " ..
@@ -321,11 +325,11 @@ function Lib:EndNewData(chan,sender)
 		end
 	end
 	self:CreateUserEntry(chan,owner)
-	LibSharedDb_Data[chan]["Data"][owner]["Data"] = data
-	LibSharedDb_Data[chan]["Data"][owner]["Config"]["Version"] =
+	self.Db[chan]["Data"][owner]["Data"] = data
+	self.Db[chan]["Data"][owner]["Config"]["Version"] =
 		self.Buffer[chan][sender]["Version"]
 	self.Dbg:Debug(LOG_LEVEL.NORMAL,"Got new version " .. 
-		LibSharedDb_Data[chan]["Data"][owner]["Config"]["Version"] .. " from " .. sender ..
+		self.Db[chan]["Data"][owner]["Config"]["Version"] .. " from " .. sender ..
 		" in channel " .. chan .. ": ",data)
 	self.Buffer[chan][sender] = nil
 	self:CallChangedDataHooks(chan,owner)
@@ -341,14 +345,14 @@ end
 
 function Lib:GetMyMain(chan)
 	if self:ExistsUserEntry(chan,self.Const.SelfPlayerName) then
-		return LibSharedDb_Data[chan]["Data"][self.Const.SelfPlayerName]["Data"][self.Const.ConfigVersion]["Main"]
+		return self.Db[chan]["Data"][self.Const.SelfPlayerName]["Data"][self.Const.ConfigVersion]["Main"]
 	end
 	return self.Const.SelfPlayerName
 end
 
 function Lib:IsTwinkOf(chan,twink,main)
 	if twink == main or (self:ExistsUserEntry(chan,main) and
-	  LibSharedDb_Data[chan]["Data"][main]["Data"][self.Const.ConfigVersion]["Twinks"][twink] == true) then
+	  self.Db[chan]["Data"][main]["Data"][self.Const.ConfigVersion]["Twinks"][twink] == true) then
 		return true
 	end
 	return false
@@ -363,9 +367,9 @@ function Lib:CreateChannelEntry(chan)
 	if self:ExistsChannelEntry(chan) == true then
 		return
 	end
-	LibSharedDb_Data[chan] = {}
-	LibSharedDb_Data[chan]["Data"] = {}
-	LibSharedDb_Data[chan]["Config"] = {}
+	self.Db[chan] = {}
+	self.Db[chan]["Data"] = {}
+	self.Db[chan]["Config"] = {}
 end
 
 function Lib:CreateUserEntry(chan,user)
@@ -373,17 +377,17 @@ function Lib:CreateUserEntry(chan,user)
 		return
 	end
 	self:CreateChannelEntry(chan)
-	LibSharedDb_Data[chan]["Data"][user] = {}
-	LibSharedDb_Data[chan]["Data"][user]["Data"] = {}
-	LibSharedDb_Data[chan]["Data"][user]["Config"] = {}
-	LibSharedDb_Data[chan]["Data"][user]["Config"]["Version"] = 0
-	LibSharedDb_Data[chan]["Data"][user]["Data"][self.Const.ConfigVersion] = {}
-	LibSharedDb_Data[chan]["Data"][user]["Data"][self.Const.ConfigVersion]["Twinks"]  = {}
-	LibSharedDb_Data[chan]["Data"][user]["Data"][self.Const.ConfigVersion]["Main"] = self.Const.SelfPlayerName
+	self.Db[chan]["Data"][user] = {}
+	self.Db[chan]["Data"][user]["Data"] = {}
+	self.Db[chan]["Data"][user]["Config"] = {}
+	self.Db[chan]["Data"][user]["Config"]["Version"] = 0
+	self.Db[chan]["Data"][user]["Data"][self.Const.ConfigVersion] = {}
+	self.Db[chan]["Data"][user]["Data"][self.Const.ConfigVersion]["Twinks"]  = {}
+	self.Db[chan]["Data"][user]["Data"][self.Const.ConfigVersion]["Main"] = user
 end
 
 function Lib:ExistsChannelEntry(chan)
-	if LibSharedDb_Data[chan] ~= nil then
+	if self.Db[chan] ~= nil then
 		return true
 	end
 	return false
@@ -391,7 +395,7 @@ end
 
 function Lib:ExistsUserEntry(chan,user)
 	if self:ExistsChannelEntry(chan) and
-	  LibSharedDb_Data[chan]["Data"][user] ~= nil then
+	  self.Db[chan]["Data"][user] ~= nil then
 		return true
 	end
 	return false
@@ -399,7 +403,7 @@ end
 
 function Lib:ExistsUserPrefixEntry(chan,user,prefix)
 	if self:ExistsUserEntry(chan,user) and
-	  LibSharedDb_Data[chan]["Data"][user]["Data"][prefix] ~= nil then
+	  self.Db[chan]["Data"][user]["Data"][prefix] ~= nil then
 		return true
 	end
 	return false
@@ -500,11 +504,11 @@ SlashCmdList["LIBSHAREDDB"] = Lib.SlashCommand
 
 --[[--
 function Lib:RecalcMergedData(chan,user)
-	for prefix,data in pairs(LibSharedDb_Data[chan]["Data"][user]["Data"]) do
+	for prefix,data in pairs(self.Db[chan]["Data"][user]["Data"]) do
 		if self.MergedData[prefix] == nil then
 			self.MergedData[prefix] = {}
 		end
-		if type(LibSharedDb_Data[chan]["Data"][user]["Data"][prefix]) == "table" then
+		if type(self.Db[chan]["Data"][user]["Data"][prefix]) == "table" then
 			for key,val in pairs(data) do
 			end
 		end
@@ -516,7 +520,7 @@ function Lib:CreateUserPrefixEntry(chan,user,prefix)
 	if self:ExistsUserPrefixEntry(chan,user,prefix) == true then
 		return
 	end
-	LibSharedDb_Data[chan]["Data"][user]["Data"][prefix] = {}
+	self.Db[chan]["Data"][user]["Data"][prefix] = {}
 end
 --]]--
 
@@ -551,8 +555,8 @@ function Ext:ExistsUserPrefixEntry(chan,user,prefix)
 end
 
 function Ext:IncrementVersion(chan,user)
-	LibSharedDb_Data[chan]["Data"][user]["Config"]["Version"] =
-		LibSharedDb_Data[chan]["Data"][user]["Config"]["Version"] + 1
+	Lib.Db[chan]["Data"][user]["Config"]["Version"] =
+		Lib.Db[chan]["Data"][user]["Config"]["Version"] + 1
 end
 
 function Ext:SetData(chan,prefix,data)
@@ -560,7 +564,7 @@ function Ext:SetData(chan,prefix,data)
 	if self:ExistsUserEntry(chan,main) ~= true then
 		return false
 	end
-	LibSharedDb_Data[chan]["Data"][main]["Data"][prefix] = data
+	Lib.Db[chan]["Data"][main]["Data"][prefix] = data
 	self:IncrementVersion(chan,main)
 	Lib.Dbg:Debug(LOG_LEVEL.NORMAL,"New Data for user " .. main .. " in chan " .. chan .. " with prefix " .. prefix)
 end
@@ -573,7 +577,7 @@ function Ext:GetData(chan,user,prefix)
 	if Ext:ExistsUserPrefixEntry(chan,user,prefix) == false then
 		return nil
 	end
-	return LibSharedDb_Data[chan]["Data"][self:GetMain(chan,user)]["Data"][prefix]
+	return Lib.Db[chan]["Data"][self:GetMain(chan,user)]["Data"][prefix]
 end
 
 function Ext:GetChanData(chan,prefix,includeSelf)
@@ -582,7 +586,7 @@ function Ext:GetChanData(chan,prefix,includeSelf)
 	end
 	local main = self:GetMain(chan,nil)
 	local ret = {}
-	for user,data in pairs(LibSharedDb_Data[chan]["Data"]) do
+	for user,data in pairs(Lib.Db[chan]["Data"]) do
 		if (includeSelf == true or (user ~= main and user ~= Lib.Const.SelfPlayerName)) and
 		  self:ExistsUserPrefixEntry(chan,user,prefix) then
 			ret[user] = data["Data"][prefix]
@@ -610,11 +614,13 @@ function Ext:SetMyMain(chan,main)
 	if main == nil then
 		main = Lib.Const.SelfPlayerName
 	end
-	LibSharedDb_Data[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Main"] = main
+	Lib.AceDb:SetProfile(main)
+	Lib.Db = Lib.AceDb.profile
+	--Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Main"] = main
 	--[[--
-	for prefix,_ in pairs(LibSharedDb_Data[chan]["Data"][Lib.Const.SelfPlayerName]["Data"]) do
+	for prefix,_ in pairs(Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"]) do
 		if prefix ~= Lib.Const.ConfigVersion then
-			LibSharedDb_Data[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][prefix] = nil
+			Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][prefix] = nil
 		end
 	end
 	--]]--
@@ -628,14 +634,14 @@ function Ext:GetMain(chan,user)
 	if self:ExistsUserPrefixEntry(chan,user,Lib.Const.ConfigVersion) ~= true then
 		return user
 	end
-	return LibSharedDb_Data[chan]["Data"][user]["Data"][Lib.Const.ConfigVersion]["Main"]
+	return Lib.Db[chan]["Data"][user]["Data"][Lib.Const.ConfigVersion]["Main"]
 end
 
 function Ext:AddTwink(chan,twink)
 	if self:ExistsChannelEntry(chan) ~= true then
 		return false
 	end
-	LibSharedDb_Data[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"][twink]  = true
+	Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"][twink]  = true
 	self:IncrementVersion(chan,Lib.Const.SelfPlayerName)
 	return true
 end
@@ -644,7 +650,7 @@ function Ext:DelTwink(chan,twink)
 	if self:ExistsChannelEntry(chan) ~= true then
 		return false
 	end
-	LibSharedDb_Data[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"][twink]  = nil
+	Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"][twink]  = nil
 	self:IncrementVersion(chan,Lib.Const.SelfPlayerName)
 	return true
 end
@@ -653,7 +659,7 @@ function Ext:GetTwinks(chan)
 	if self:ExistsChannelEntry(chan) ~= true then
 		return nil
 	end
-	return deepcopy(LibSharedDb_Data[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"])
+	return deepcopy(Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"])
 end
 
 function Ext:DeepCompare(t1,t2,ignoreMetaTable) -- http://snippets.luacode.org/snippets/Deep_Comparison_of_Two_Values_3
