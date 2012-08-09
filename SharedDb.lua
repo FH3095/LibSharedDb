@@ -67,7 +67,7 @@ function Lib:Init()
 	  LibSharedDb_Config["Version"] ~= self.Const.ConfigVersion then
 		LibSharedDb_Data = {}
 		self.AceDb = LibStub:GetLibrary("AceDB-3.0"):New("LibSharedDb_Data", {})
-		self.Db = self.AceDb.profile
+		self.Db = self.AceDb.factionrealm
 		LibSharedDb_Config = {}
 		LibSharedDb_Config["Version"] = self.Const.ConfigVersion
 	end
@@ -89,7 +89,7 @@ function Lib:ADDON_LOADED(...)
 		self.Frame:UnregisterEvent("ADDON_LOADED")
 		self.ADDON_LOADED = nil
 		self.AceDb = LibStub:GetLibrary("AceDB-3.0"):New("LibSharedDb_Data", {})
-		self.Db = self.AceDb.profile
+		self.Db = self.AceDb.factionrealm
 		self:Init()
 		-- self.Timer:ScheduleTimer(self.Init,self.Config.StartupDelay,self)
 	end
@@ -614,9 +614,8 @@ function Ext:SetMyMain(chan,main)
 	if main == nil then
 		main = Lib.Const.SelfPlayerName
 	end
-	Lib.AceDb:SetProfile(main)
-	Lib.Db = Lib.AceDb.profile
-	--Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Main"] = main
+	Lib.Db = Lib.AceDb.factionrealm
+	Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Main"] = main
 	--[[--
 	for prefix,_ in pairs(Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"]) do
 		if prefix ~= Lib.Const.ConfigVersion then
