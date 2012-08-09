@@ -31,7 +31,7 @@ Lib.Const.VirtChanTranslate = {
 Lib.Config = {}
 Lib.Config.SendDataInterval = 15 -- Seconds
 Lib.Config.CleanupInterval = 60
-Lib.Config.StartupDelay = 30
+-- Lib.Config.StartupDelay = 30
 
 Ext.Const = {}
 Ext.Const.GuildChan = Lib.Const.GuildChan
@@ -58,9 +58,7 @@ local function split(str,delim,max,plain)
 end
 
 function Lib:Init()
-	self.Dbg:Debug(LOG_LEVEL.NORMAL,"SharedDb:Init");
-	self.Frame:RegisterEvent("CHAT_MSG_CHANNEL")
-	self.Frame:RegisterEvent("CHAT_MSG_ADDON")
+	self.Dbg:Debug(LOG_LEVEL.NORMAL,"SharedDb:Init")
 	self.Timer:ScheduleRepeatingTimer(self.AdvertiseVersionAndSendData,
 		self.Config.SendDataInterval,self)
 	self.Timer:ScheduleRepeatingTimer(self.Cleanup,
@@ -79,6 +77,8 @@ function Lib:Init()
 		self:CreateUserEntry(chan,self.Const.SelfPlayerName)
 	end
 	self:Cleanup()
+	self.Frame:RegisterEvent("CHAT_MSG_CHANNEL")
+	self.Frame:RegisterEvent("CHAT_MSG_ADDON")
 end
 
 -- ## Events ## --
@@ -90,8 +90,8 @@ function Lib:ADDON_LOADED(...)
 		self.ADDON_LOADED = nil
 		self.AceDb = LibStub:GetLibrary("AceDB-3.0"):New("LibSharedDb_Data", {})
 		self.Db = self.AceDb.profile
-		-- self:Init()
-		self.Timer:ScheduleTimer(self.Init,self.Config.StartupDelay,self)
+		self:Init()
+		-- self.Timer:ScheduleTimer(self.Init,self.Config.StartupDelay,self)
 	end
 end
 
