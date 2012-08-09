@@ -6,6 +6,7 @@
 ## SavedVariables: LibSharedDb_Data, LibSharedDb_Config
 
 libs\LibStub\LibStub.lua
+libs\AceDB-3.0\AceDB-3.0.xml
 libs\AceSerializer-3.0\AceSerializer-3.0.xml
 libs\AceTimer-3.0\AceTimer-3.0.xml
 libs\ChatThrottleLib\ChatThrottleLib.xml
