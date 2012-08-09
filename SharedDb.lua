@@ -33,7 +33,7 @@ Lib.Const.VirtChanTranslate = {
 Lib.Config = {}
 Lib.Config.SendDataInterval = 15 -- Seconds
 Lib.Config.CleanupInterval = 60
--- Lib.Config.StartupDelay = 30
+Lib.Config.MaxStartupDelay = 45
 Lib.Config.TestInitReadyInterval = 1
 
 Ext.Const = {}
@@ -60,21 +60,24 @@ local function split(str,delim,max,plain)
 	return ret
 end
 
-function Lib:InitWhenReady()
+function Lib.InitWhenReady(count)
 	local InitNow = true
 
-	local g = GetGuildInfo("player")
-
-	if g == nil then
+	local tmp = GetGuildInfo("player")
+	if tmp == nil then
 		InitNow = false
 	end
-	
-	if InitNow == true then
-		self:Init()
+
+	local ForceInit = false
+	if count * Lib.Config.TestInitReadyInterval >= Lib.Config.MaxStartupDelay then
+		ForceInit = true
+	end
+
+	if InitNow == true or ForceInit == true then
+		print("LibSharedDb: Startup")
+		Lib:Init()
 	else
-		self.Timer:ScheduleTimer(self.InitWhenReady,Lib.Config.TestInitReadyInterval,
-			self)
-		print("LibSharedDb: Waiting for data...")
+		Lib.Timer:ScheduleTimer(Lib.InitWhenReady,Lib.Config.TestInitReadyInterval,count + 1)
 	end
 end
 
@@ -116,7 +119,7 @@ function Lib:ADDON_LOADED(...)
 		self.ADDON_LOADED = nil
 		self.AceDb = LibStub:GetLibrary("AceDB-3.0"):New("LibSharedDb_Data", {})
 		self:SetDb()
-		self:InitWhenReady()
+		self.InitWhenReady(0)
 		-- self.Timer:ScheduleTimer(self.Init,self.Config.StartupDelay,self)
 	end
 end
