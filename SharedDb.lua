@@ -698,7 +698,7 @@ end
 
 function Ext:SetMyMain(chan,main)
 	local TranslatedChan = Lib:ExternToInternChan(chan)
-	if self:ExistsChannelEntry(TranslatedChan) ~= true then
+	if self:ExistsUserEntry(TranslatedChan,main) ~= true then
 		return false
 	end
 	if main == nil then
