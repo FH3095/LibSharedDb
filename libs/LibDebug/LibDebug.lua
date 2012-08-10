@@ -15,43 +15,44 @@ LibDbg.LOG_LEVEL.NONE = 0
 Lib.DebugLevel = LibDbg.LOG_LEVEL.NONE
 Lib.ChatPrefix = "LibDbg"
 
-local function BasicInit()
-	local function _FindDebugChatFrame()
-		for i=1, NUM_CHAT_WINDOWS do
-			if GetChatWindowInfo(i):lower() == "debug" and tContains( { GetChatWindowMessages(i) } ,"ERRORS") then
-				local PrintMessage = false
-				if LibDbg.DebugChatFrame == nil then
-					PrintMessage = true
-				end
-				LibDbg.DebugChatFrame = getglobal("ChatFrame"..i)
-				if PrintMessage == true then
-					Lib:Debug(LibDbg.LOG_LEVEL.NONE,"Found Debug ChatFrame: ChatFrame" .. i)
-				end
-				return
+local function FindDebugChatFrame()
+	for i=1, NUM_CHAT_WINDOWS do
+		if GetChatWindowInfo(i):lower() == "debug" and tContains( { GetChatWindowMessages(i) } ,"ERRORS") then
+			local PrintMessage = false
+			if LibDbg.DebugChatFrame == nil then
+				PrintMessage = true
 			end
+			LibDbg.DebugChatFrame = getglobal("ChatFrame"..i)
+			if PrintMessage == true then
+				Lib:Debug(LibDbg.LOG_LEVEL.NONE,"Found Debug ChatFrame: ChatFrame" .. i)
+			end
+			return
 		end
-		if LibDbg.DebugChatFrame ~= nil then
-			Lib:Debug(LibDbg.LOG_LEVEL.NONE,"Lost Debug ChatFrame.")
-		end
-		LibDbg.DebugChatFrame = nil
 	end
+	if LibDbg.DebugChatFrame ~= nil then
+		Lib:Debug(LibDbg.LOG_LEVEL.NONE,"Lost Debug ChatFrame.")
+	end
+	LibDbg.DebugChatFrame = nil
+end
+
+local function BasicInit()
 	local function _OpenNewWindowHook(name)
-		_FindDebugChatFrame()
+		FindDebugChatFrame()
 	end
 	local function _PopInWindowHook(frame,fallbackFrame)
-		_FindDebugChatFrame()
+		FindDebugChatFrame()
 	end
 	local function _ToggleChatMessageGroupHook(checked,chatMsgType)
-		_FindDebugChatFrame()
+		FindDebugChatFrame()
 	end
 	local function _OpenChatHook(text,chatFrame)
-		_FindDebugChatFrame()
+		FindDebugChatFrame()
 	end
 	--hooksecurefunc("FCF_OpenNewWindow",_OpenNewWindowHook)
 	--hooksecurefunc("FCF_PopInWindow",_PopInWindowHook)
 	hooksecurefunc("ToggleChatMessageGroup",_ToggleChatMessageGroupHook)
 	hooksecurefunc("ChatFrame_OpenChat",_OpenChatHook)
-	_FindDebugChatFrame()
+	FindDebugChatFrame()
 end
 
 function Lib:ConvertToText(Data)
@@ -102,8 +103,12 @@ function Lib:IsLogging(DebugLevel)
 	return self.DebugLevel >= DebugLevel and LibDbg.DebugChatFrame ~= nil
 end
 
+function Lib:SearchDebugChatFrame()
+	FindDebugChatFrame()
+end
+
 function Lib:Embed(Target)
-	local MixIns = {"ConvertToText","IsLogging","Debug","DebugLevel","ChatPrefix"}
+	local MixIns = {"ConvertToText","IsLogging","Debug","SearchDebugChatFrame","DebugLevel","ChatPrefix"}
 	for _,name in pairs(MixIns) do
 		Target[name] = self[name]
 	end

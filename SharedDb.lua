@@ -22,13 +22,14 @@ Lib.LoadedCallbacks = {}
 
 Lib.Const = {}
 Lib.Const.SelfPlayerName = UnitName("player")
+Lib.Const.SelfGuildName = nil
 Lib.Const.ChatPrefix = "LSDB1"
 Lib.Const.ConfigVersion = "LSDB1"
 Lib.Const.VirtChanPrefix = "LibSharedDb_"
-Lib.Const.GuildChan = Lib.Const.VirtChanPrefix .. "Guild"
-Lib.Const.VirtChanTranslate = {
-	GUILD = Lib.Const.GuildChan,
+Lib.Const.GuildChanPrefix = Lib.Const.VirtChanPrefix .. "GUILD_"
+Lib.Const.ExternToInternChan = {
 }
+Lib.Const.InternToExternChan = {}
 
 Lib.Config = {}
 Lib.Config.SendDataInterval = 15 -- Seconds
@@ -36,8 +37,6 @@ Lib.Config.CleanupInterval = 60
 Lib.Config.MaxStartupDelay = 45
 Lib.Config.TestInitReadyInterval = 1
 
-Ext.Const = {}
-Ext.Const.GuildChan = Lib.Const.GuildChan
 
 local function BasicInit()
 	Lib.Frame:SetScript("OnEvent",
@@ -63,8 +62,8 @@ end
 function Lib.InitWhenReady(count)
 	local InitNow = true
 
-	local tmp = GetGuildInfo("player")
-	if tmp == nil then
+	local Tmp = GetGuildInfo("player")
+	if Tmp == nil then
 		InitNow = false
 	end
 
@@ -82,7 +81,20 @@ function Lib.InitWhenReady(count)
 end
 
 function Lib:Init()
+	self.Dbg:SearchDebugChatFrame()
 	self.Dbg:Debug(LOG_LEVEL.NORMAL,"SharedDb:Init")
+
+	-- Constants init
+	self.Const.SelfGuildName = GetGuildInfo("player")
+	if self.Const.SelfGuildName == nil then
+		self.Const.SelfGuildName = ""
+	end
+	self.Const.ExternToInternChan["GUILD"] = self.Const.GuildChanPrefix .. self.Const.SelfGuildName
+	for ext,int in pairs(self.Const.ExternToInternChan) do
+		self.Const.InternToExternChan[int] = ext
+	end
+
+	-- Init
 	self.Timer:ScheduleRepeatingTimer(self.AdvertiseVersionAndSendData,
 		self.Config.SendDataInterval,self)
 	self.Timer:ScheduleRepeatingTimer(self.Cleanup,
@@ -98,6 +110,12 @@ function Lib:Init()
 	for chan,data in pairs(self.Db) do
 		data["Config"]["ResendRequested"] = false
 		data["Config"]["SendingData"] = false
+		data["Config"]["SessionShareOff"] = false
+		if chan:find(self.Const.GuildChanPrefix,1,true) == 1 and
+		  (self:InternToExternChan(chan) == chan or self.Const.GuildName == "") then
+			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Share off for " .. chan)
+			data["Config"]["SessionShareOff"] = true
+		end
 		self:CreateUserEntry(chan,self.Const.SelfPlayerName)
 	end
 	self:Cleanup()
@@ -126,6 +144,7 @@ end
 
 function Lib:GUILD_ROSTER_UPDATE()
 	self.Dbg:Debug(LOG_LEVEL.NORMAL,"GUILD_ROSTER_UPDATE")
+	local GuildChan = self:ExternToInternChan("GUILD")
 	local GuildMember = {}
 	for i = 0,1000 do
 		local name = GetGuildRosterInfo(i)
@@ -137,23 +156,22 @@ function Lib:GUILD_ROSTER_UPDATE()
 		self.Dbg:Debug(LOG_LEVEL.ERROR,"GUILD_ROSTER_UPDATE, but GetGuildRosterInfo doesn't contain myself, skipping cleanup!")
 		return
 	end
-	for user,val in pairs(self.Db[self.Const.GuildChan]["Data"]) do
+	for user,val in pairs(self.Db[GuildChan]["Data"]) do
 		if GuildMember[user] ~= true then
-			self.Db[self.Const.GuildChan]["Data"][user] = nil
+			self.Db[GuildChan]["Data"][user] = nil
 			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Removing data for user " .. user .. 
-				" from channel " .. self.Const.GuildChan)
+				" from channel " .. GuildChan)
 		end
 	end
 	self.Frame:UnregisterEvent("GUILD_ROSTER_UPDATE")
-	self.Db[self.Const.GuildChan]["Config"]["NextCleanup"] = 
-		time() + self.Config.CleanupInterval - 1
+	self.Db[GuildChan]["Config"]["NextCleanup"] = time() + self.Config.CleanupInterval - 1
 end
 
 function Lib:CHAT_MSG_CHANNEL(message,sender,language,channelString,_,flags,_,channelNumber,channelName,_,counter,guid)
 end
 
 function Lib:CHAT_MSG_ADDON(prefix, message, channel, sender)
-	local chan = self:TranslateVirtChan(channel)
+	local chan = self:ExternToInternChan(channel)
 	if prefix ~= self.Const.ChatPrefix or
 		sender == self.Const.SelfPlayerName or
 		chan == nil then
@@ -204,16 +222,17 @@ end
 -- ## Cleanup functions ## --
 
 function Lib:Cleanup()
-	if self:ExistsChannelEntry(self.Const.GuildChan) then
+	if self:ExistsChannelEntry(self:ExternToInternChan("GUILD")) then
 		self:CleanupGuildChannel()
 	end
 end
 
 function Lib:CleanupGuildChannel()
 	self.Frame:RegisterEvent("GUILD_ROSTER_UPDATE")
+	local GuildChan = self:ExternToInternChan("GUILD")
 	local function CallGuildRosterIfRequired()
-		if self.Db[self.Const.GuildChan]["Config"]["NextCleanup"] == nil or
-		   self.Db[self.Const.GuildChan]["Config"]["NextCleanup"] <= time() then
+		if self.Db[GuildChan]["Config"]["NextCleanup"] == nil or
+		   self.Db[GuildChan]["Config"]["NextCleanup"] <= time() then
 			GuildRoster()
 			self.Timer:ScheduleTimer(CallGuildRosterIfRequired,10)
 		end
@@ -224,19 +243,18 @@ end
 -- ## Outgoing communication functions ## --
 
 function Lib:SendMessage(prio,target,content,callback,callbackparam)
-	self.Dbg:Debug(LOG_LEVEL.DATA,"SendMessage " .. prio .. "," .. target .. "," .. content)
 	if target:find(self.Const.VirtChanPrefix,1,true) == 1 then
-		local TargetChan = nil
-		if target == self.Const.GuildChan then
-			TargetChan = "GUILD"
-		end
-		if TargetChan ~= nil then
+		local TargetChan = self:InternToExternChan(target)
+		if TargetChan ~= nil and TargetChan:find(self.Const.VirtChanPrefix,1,true) ~= 1 then
+			self.Dbg:Debug(LOG_LEVEL.DATA,"SendMessage " .. prio .. "," .. TargetChan .. "(" ..
+			  target .. ")," .. content)
 			ChatThrottleLib:SendAddonMessage(prio,self.Const.ChatPrefix,content,
 				TargetChan,nil,nil,callback,callbackparam)
 		else
-			error("Called SendMessage with invalid target " .. target)
+			error("Called SendMessage with invalid target " .. target .. " translated to " .. TargetChan)
 		end
 	else
+		self.Dbg:Debug(LOG_LEVEL.DATA,"SendMessage " .. prio .. "," .. target .. "," .. content)
 		ChatThrottleLib:SendChatMessage(prio,self.Const.ChatPrefix,content,"CHANNEL",
 			nil,target,nil,callback,callbackparam)
 	end
@@ -244,29 +262,31 @@ end
 
 function Lib:AdvertiseVersionAndSendData()
 	for chan,data in pairs(self.Db) do
-		assert(data~=nil)
-		assert(data["Data"]~=nil)
-		local MainChar = self:GetMyMain(chan)
-		if data["Config"]["SendingData"] ~= true and data["Config"]["ResendRequested"] ~= true then
-			if data["Data"][MainChar] == nil then
-				self.Dbg:Debug(LOG_LEVEL.NORMAL,"Don't advertise Version because I don't have any data for " .. MainChar .. ".")
-				error("No own data for chan " .. chan)
-			else
-				assert(data["Data"][MainChar]["Config"]~=nil,"No Config for " .. MainChar .. "!")
-				assert(data["Data"][MainChar]["Config"]["Version"]~=nil,"No Version for " .. MainChar .. "!")
-				self.Dbg:Debug(LOG_LEVEL.NORMAL,"Advertise Verison " .. 
-					data["Data"][MainChar]["Config"]["Version"] ..
-					" to channel " .. chan .. " for " .. MainChar)
-				self:SendMessage("NORMAL",chan,"VER;" .. MainChar .. ";" ..
-					data["Data"][MainChar]["Config"]["Version"])
+		if data["Config"]["SessionShareOff"] ~= true then
+			assert(data~=nil)
+			assert(data["Data"]~=nil)
+			local MainChar = self:GetMyMain(chan)
+			if data["Config"]["SendingData"] ~= true and data["Config"]["ResendRequested"] ~= true then
+				if data["Data"][MainChar] == nil then
+					self.Dbg:Debug(LOG_LEVEL.NORMAL,"Don't advertise Version because I don't have any data for " .. MainChar .. ".")
+					error("No own data for chan " .. chan)
+				else
+					assert(data["Data"][MainChar]["Config"]~=nil,"No Config for " .. MainChar .. "!")
+					assert(data["Data"][MainChar]["Config"]["Version"]~=nil,"No Version for " .. MainChar .. "!")
+					self.Dbg:Debug(LOG_LEVEL.NORMAL,"Advertise Verison " .. 
+						data["Data"][MainChar]["Config"]["Version"] ..
+						" to channel " .. chan .. " for " .. MainChar)
+					self:SendMessage("NORMAL",chan,"VER;" .. MainChar .. ";" ..
+						data["Data"][MainChar]["Config"]["Version"])
+				end
 			end
-		end
-		if data["Config"]["ResendRequested"] == true then
-			if data["Data"][MainChar] == nil then
-				self.Dbg:Debug(LOG_LEVEL.ERROR,"ResendRequested, but I have no data for myself!")
-			else
-				self:SendData(chan,MainChar)
-				self.Db[chan]["Config"]["ResendRequested"] = false
+			if data["Config"]["ResendRequested"] == true then
+				if data["Data"][MainChar] == nil then
+					self.Dbg:Debug(LOG_LEVEL.ERROR,"ResendRequested, but I have no data for myself!")
+				else
+					self:SendData(chan,MainChar)
+					self.Db[chan]["Config"]["ResendRequested"] = false
+				end
 			end
 		end
 	end
@@ -364,6 +384,24 @@ function Lib:EndNewData(chan,sender)
 	self:CallChangedDataHooks(chan,owner)
 end
 
+-- ## Channelname translate functions ## --
+
+function Lib:ExternToInternChan(chan)
+	local Tmp = self.Const.ExternToInternChan[chan]
+	if Tmp ~= nil then
+		return Tmp
+	end
+	return chan
+end
+
+function Lib:InternToExternChan(chan)
+	local Tmp = self.Const.InternToExternChan[chan]
+	if Tmp ~= nil then
+		return Tmp
+	end
+	return chan
+end
+
 -- ## Util functions ## --
 
 function Lib:CallChangedDataHooks(chan,user)
@@ -385,11 +423,6 @@ function Lib:IsTwinkOf(chan,twink,main)
 		return true
 	end
 	return false
-end
-
-function Lib:TranslateVirtChan(chan)
-	local UpperChan = chan:upper()
-	return self.Const.VirtChanTranslate[UpperChan]
 end
 
 function Lib:SetDb()
@@ -472,7 +505,7 @@ function Lib:HandleCommand(msg,editbox)
 	local cmd = split(msg," ",-1,true)
 	cmd[1] = cmd[1]:lower()
 	if cmd[1] == "setmain" and cmd[2] ~= nil and cmd[2] ~= "" then
-		local chan = self:TranslateVirtChan(cmd[2])
+		local chan = self:ExternToInternChan(cmd[2])
 		if chan == nil then
 			chan = cmd[2]
 		end
@@ -486,7 +519,7 @@ function Lib:HandleCommand(msg,editbox)
 		end
 	elseif (cmd[1] == "addtwink" or cmd[1] == "deltwink") and
 	  cmd[3] ~= nil and cmd[2] ~= "" and cmd[3] ~= "" then
-		local chan = self:TranslateVirtChan(cmd[2])
+		local chan = self:ExternToInternChan(cmd[2])
 		if chan == nil then
 			chan = cmd[2]
 		end
@@ -512,7 +545,7 @@ function Lib:HandleCommand(msg,editbox)
 		end
 	elseif (cmd[1] == "showmain" or cmd[1] == "showtwinks") and
 	  cmd[2] ~= nil and cmd[2] ~= "" then
-		local chan = self:TranslateVirtChan(cmd[2])
+		local chan = self:ExternToInternChan(cmd[2])
 		if chan == nil then
 			chan = cmd[2]
 		end
@@ -580,34 +613,36 @@ local function deepcopy(object) -- http://lua-users.org/wiki/CopyTable
 end
 
 function Ext:JoinChannel(chan)
-	Lib:CreateUserEntry(chan,Lib.Const.SelfPlayerName)
+	Lib:CreateUserEntry(Lib:ExternToInternChan(chan),Lib.Const.SelfPlayerName)
 end
 
 function Ext:ExistsChannelEntry(chan)
-	return Lib:ExistsChannelEntry(chan)
+	return Lib:ExistsChannelEntry(Lib:ExternToInternChan(chan))
 end
 
 function Ext:ExistsUserEntry(chan,user)
-	return Lib:ExistsUserEntry(chan,user)
+	return Lib:ExistsUserEntry(Lib:ExternToInternChan(chan),user)
 end
 
 function Ext:ExistsUserPrefixEntry(chan,user,prefix)
-	return Lib:ExistsUserPrefixEntry(chan,user,prefix)
+	return Lib:ExistsUserPrefixEntry(Lib:ExternToInternChan(chan),user,prefix)
 end
 
 function Ext:IncrementVersion(chan,user)
-	Lib.Db[chan]["Data"][user]["Config"]["Version"] =
-		Lib.Db[chan]["Data"][user]["Config"]["Version"] + 1
+	local TranslatedChan = Lib:ExternToInternChan(chan)
+	Lib.Db[TranslatedChan]["Data"][user]["Config"]["Version"] =
+		Lib.Db[TranslatedChan]["Data"][user]["Config"]["Version"] + 1
 end
 
 function Ext:SetData(chan,prefix,data)
-	local main = self:GetMain(chan,nil)
-	if self:ExistsUserEntry(chan,main) ~= true then
+	local TranslatedChan = Lib:ExternToInternChan(chan)
+	local Main = self:GetMain(TranslatedChan,nil)
+	if self:ExistsUserEntry(TranslatedChan,Main) ~= true then
 		return false
 	end
-	Lib.Db[chan]["Data"][main]["Data"][prefix] = data
-	self:IncrementVersion(chan,main)
-	Lib.Dbg:Debug(LOG_LEVEL.NORMAL,"New Data for user " .. main .. " in chan " .. chan .. " with prefix " .. prefix)
+	Lib.Db[TranslatedChan]["Data"][Main]["Data"][prefix] = data
+	self:IncrementVersion(TranslatedChan,Main)
+	Lib.Dbg:Debug(LOG_LEVEL.NORMAL,"New Data for user " .. Main .. " in chan " .. TranslatedChan .. " with prefix " .. prefix)
 end
 
 function Ext:CopyAndSetData(chan,prefix,data)
@@ -615,21 +650,23 @@ function Ext:CopyAndSetData(chan,prefix,data)
 end
 
 function Ext:GetData(chan,user,prefix)
-	if Ext:ExistsUserPrefixEntry(chan,user,prefix) == false then
+	local TranslatedChan = Lib:ExternToInternChan(chan)
+	if Ext:ExistsUserPrefixEntry(TranslatedChan,user,prefix) == false then
 		return nil
 	end
-	return Lib.Db[chan]["Data"][self:GetMain(chan,user)]["Data"][prefix]
+	return Lib.Db[TranslatedChan]["Data"][self:GetMain(TranslatedChan,user)]["Data"][prefix]
 end
 
 function Ext:GetChanData(chan,prefix,includeSelf)
-	if not self:ExistsChannelEntry(chan) then
+	local TranslatedChan = Lib:ExternToInternChan(chan)
+	if not self:ExistsChannelEntry(TranslatedChan) then
 		return nil
 	end
-	local main = self:GetMain(chan,nil)
+	local main = self:GetMain(TranslatedChan,nil)
 	local ret = {}
-	for user,data in pairs(Lib.Db[chan]["Data"]) do
+	for user,data in pairs(Lib.Db[TranslatedChan]["Data"]) do
 		if (includeSelf == true or (user ~= main and user ~= Lib.Const.SelfPlayerName)) and
-		  self:ExistsUserPrefixEntry(chan,user,prefix) then
+		  self:ExistsUserPrefixEntry(TranslatedChan,user,prefix) then
 			ret[user] = data["Data"][prefix]
 		end
 	end
@@ -660,17 +697,18 @@ function Ext:SetLoadedCallback(func,param,dontCallWhenAlreadyLoaded)
 end
 
 function Ext:SetMyMain(chan,main)
-	if self:ExistsChannelEntry(chan) ~= true then
+	local TranslatedChan = Lib:ExternToInternChan(chan)
+	if self:ExistsChannelEntry(TranslatedChan) ~= true then
 		return false
 	end
 	if main == nil then
 		main = Lib.Const.SelfPlayerName
 	end
-	Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Main"] = main
+	Lib.Db[TranslatedChan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Main"] = main
 	--[[--
-	for prefix,_ in pairs(Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"]) do
+	for prefix,_ in pairs(Lib.Db[TranslatedChan]["Data"][Lib.Const.SelfPlayerName]["Data"]) do
 		if prefix ~= Lib.Const.ConfigVersion then
-			Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][prefix] = nil
+			Lib.Db[TranslatedChan]["Data"][Lib.Const.SelfPlayerName]["Data"][prefix] = nil
 		end
 	end
 	--]]--
@@ -681,35 +719,39 @@ function Ext:GetMain(chan,user)
 	if user == nil then
 		user = Lib.Const.SelfPlayerName
 	end
-	if self:ExistsUserPrefixEntry(chan,user,Lib.Const.ConfigVersion) ~= true then
+	local TranslatedChan = Lib:ExternToInternChan(chan)
+	if self:ExistsUserPrefixEntry(TranslatedChan,user,Lib.Const.ConfigVersion) ~= true then
 		return user
 	end
-	return Lib.Db[chan]["Data"][user]["Data"][Lib.Const.ConfigVersion]["Main"]
+	return Lib.Db[TranslatedChan]["Data"][user]["Data"][Lib.Const.ConfigVersion]["Main"]
 end
 
 function Ext:AddTwink(chan,twink)
-	if self:ExistsChannelEntry(chan) ~= true then
+	local TranslatedChan = Lib:ExternToInternChan(chan)
+	if self:ExistsChannelEntry(TranslatedChan) ~= true then
 		return false
 	end
-	Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"][twink]  = true
-	self:IncrementVersion(chan,Lib.Const.SelfPlayerName)
+	Lib.Db[TranslatedChan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"][twink]  = true
+	self:IncrementVersion(TranslatedChan,Lib.Const.SelfPlayerName)
 	return true
 end
 
 function Ext:DelTwink(chan,twink)
-	if self:ExistsChannelEntry(chan) ~= true then
+	local TranslatedChan = Lib:ExternToInternChan(chan)
+	if self:ExistsChannelEntry(TranslatedChan) ~= true then
 		return false
 	end
-	Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"][twink]  = nil
-	self:IncrementVersion(chan,Lib.Const.SelfPlayerName)
+	Lib.Db[TranslatedChan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"][twink]  = nil
+	self:IncrementVersion(TranslatedChan,Lib.Const.SelfPlayerName)
 	return true
 end
 
 function Ext:GetTwinks(chan)
-	if self:ExistsChannelEntry(chan) ~= true then
+	local TranslatedChan = Lib:ExternToInternChan(chan)
+	if self:ExistsChannelEntry(TranslatedChan) ~= true then
 		return nil
 	end
-	return deepcopy(Lib.Db[chan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"])
+	return deepcopy(Lib.Db[TranslatedChan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"])
 end
 
 function Ext:DeepCompare(t1,t2,ignoreMetaTable) -- http://snippets.luacode.org/snippets/Deep_Comparison_of_Two_Values_3
