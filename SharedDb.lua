@@ -263,6 +263,8 @@ end
 function Lib:AdvertiseVersionAndSendData()
 	for chan,data in pairs(self.Db) do
 		if data["Config"]["SessionShareOff"] ~= true then
+		-- Potential Bugfix:
+		--if data["Config"]["SessionShareOff"] ~= true and data["Data"][self:GetMyMain(chan)] ~= nil then
 			assert(data~=nil)
 			assert(data["Data"]~=nil)
 			local MainChar = self:GetMyMain(chan)
