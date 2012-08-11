@@ -351,7 +351,9 @@ end
 
 function Lib.SentData(chan)
 	Lib.Db[chan]["Config"]["SendingData"] = false
-	Lib.Dbg:Debug(LOG_LEVEL.NORMAL,"Data sent to chan " .. chan)
+	if Lib.Dbg:IsLogging() then
+		Lib.Dbg:Debug(LOG_LEVEL.NORMAL,"Data sent to chan " .. chan)
+	end
 end
 
 -- ## Incoming communication functions ## --
@@ -679,7 +681,9 @@ function Ext:SetData(chan,prefix,data)
 	end
 	Lib.Db[TranslatedChan]["Data"][Main]["Data"][prefix] = data
 	self:IncrementVersion(TranslatedChan,Main)
-	Lib.Dbg:Debug(LOG_LEVEL.NORMAL,"New Data for user " .. Main .. " in chan " .. TranslatedChan .. " with prefix " .. prefix)
+	if Lib.Dbg:IsLogging() then
+		Lib.Dbg:Debug(LOG_LEVEL.NORMAL,"New Data for user " .. Main .. " in chan " .. TranslatedChan .. " with prefix " .. prefix)
+	end
 end
 
 function Ext:CopyAndSetData(chan,prefix,data)
