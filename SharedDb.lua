@@ -82,7 +82,9 @@ end
 
 function Lib:Init()
 	self.Dbg:SearchDebugChatFrame()
-	self.Dbg:Debug(LOG_LEVEL.NORMAL,"SharedDb:Init")
+	if self.Dbg:IsLogging() then
+		self.Dbg:Debug(LOG_LEVEL.NORMAL,"SharedDb:Init")
+	end
 
 	-- Constants init
 	self.Const.SelfGuildName = GetGuildInfo("player")
@@ -113,7 +115,9 @@ function Lib:Init()
 		data["Config"]["SessionShareOff"] = false
 		if chan:find(self.Const.GuildChanPrefix,1,true) == 1 and
 		  (self:InternToExternChan(chan) == chan or self.Const.GuildName == "") then
-			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Share off for " .. chan)
+			if self.Dbg:IsLogging() then
+				self.Dbg:Debug(LOG_LEVEL.NORMAL,"Share off for " .. chan)
+			end
 			data["Config"]["SessionShareOff"] = true
 		end
 		self:CreateUserEntry(chan,self.Const.SelfPlayerName)
@@ -132,7 +136,6 @@ end
 
 function Lib:ADDON_LOADED(...)
 	if (arg1 == "LibSharedDb") then
-		self.Dbg:Debug(LOG_LEVEL.NORMAL,"ADDON_LOADED", ...)
 		self.Frame:UnregisterEvent("ADDON_LOADED")
 		self.ADDON_LOADED = nil
 		self.AceDb = LibStub:GetLibrary("AceDB-3.0"):New("LibSharedDb_Data", {})
@@ -143,7 +146,9 @@ function Lib:ADDON_LOADED(...)
 end
 
 function Lib:GUILD_ROSTER_UPDATE()
-	self.Dbg:Debug(LOG_LEVEL.NORMAL,"GUILD_ROSTER_UPDATE")
+	if self.Dbg:IsLogging() then
+		self.Dbg:Debug(LOG_LEVEL.NORMAL,"GUILD_ROSTER_UPDATE")
+	end
 	local GuildChan = self:ExternToInternChan("GUILD")
 	local GuildMember = {}
 	for i = 0,1000 do
@@ -159,8 +164,10 @@ function Lib:GUILD_ROSTER_UPDATE()
 	for user,val in pairs(self.Db[GuildChan]["Data"]) do
 		if GuildMember[user] ~= true then
 			self.Db[GuildChan]["Data"][user] = nil
-			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Removing data for user " .. user .. 
-				" from channel " .. GuildChan)
+			if self.Dbg:IsLogging() then
+				self.Dbg:Debug(LOG_LEVEL.NORMAL,"Removing data for user " .. user .. 
+					" from channel " .. GuildChan)
+			end
 		end
 	end
 	self.Frame:UnregisterEvent("GUILD_ROSTER_UPDATE")
@@ -177,19 +184,25 @@ function Lib:CHAT_MSG_ADDON(prefix, message, channel, sender)
 		chan == nil then
 		return
 	end
-	self.Dbg:Debug(LOG_LEVEL.DATA,"CHAT_MSG_ADDON", chan, sender, message)
+	if self.Dbg:IsLogging() then
+		self.Dbg:Debug(LOG_LEVEL.DATA,"CHAT_MSG_ADDON", chan, sender, message)
+	end
 	local Data = split(message,";",2,true)
 	if Data[1] == "VER" then
 		local Tmp = split(Data[2],";",2,true)
 		if self:IsTwinkOf(chan,sender,Tmp[1]) == true and
 		  self:NewerVersion(chan,Tmp[1],tonumber(Tmp[2])) == true then
 			self:SendMessage("NORMAL",chan,"REQ;" .. Tmp[1])
-			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Requested new data from " .. sender)
+			if self.Dbg:IsLogging() then
+				self.Dbg:Debug(LOG_LEVEL.NORMAL,"Requested new data from " .. sender)
+			end
 		end
 	elseif Data[1] == "REQ" and Data[2] == self:GetMyMain(chan) and
 	  self.Db[chan]["Config"]["SendingData"] ~= true then
-		self.Dbg:Debug(LOG_LEVEL.NORMAL,"Data for channel " .. chan ..
-			" requested by " .. sender)
+		if self.Dbg:IsLogging() then
+			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Data for channel " .. chan ..
+				" requested by " .. sender)
+		end
 		self.Db[chan]["Config"]["ResendRequested"] = true
 	elseif Data[1] == "STADTA" then
 		local Tmp = split(Data[2],";",3,true)
@@ -197,8 +210,10 @@ function Lib:CHAT_MSG_ADDON(prefix, message, channel, sender)
 			self:StartNewData(chan,sender,tonumber(Tmp[2]))
 			self:NewData(chan,sender,Tmp[3])
 		else
-			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Refused Data from " .. sender ..
-			  " for " .. Tmp[1] .. " because sender isn't listed as twink.")
+			if self.Dbg:IsLogging() then
+				self.Dbg:Debug(LOG_LEVEL.NORMAL,"Refused Data from " .. sender ..
+					" for " .. Tmp[1] .. " because sender isn't listed as twink.")
+			end
 		end
 	elseif Data[1] == "DTA" then
 		self:NewData(chan,sender,Data[2])
@@ -212,8 +227,10 @@ end
 function Lib:NewerVersion(chan,sender,version)
 	if Ext:ExistsUserEntry(chan,sender) == false or
 	  self.Db[chan]["Data"][sender]["Config"]["Version"] ~= version then
-		self.Dbg:Debug(LOG_LEVEL.NORMAL,"Found newer version " .. version .. 
-			" for data from " .. sender .. " in chan " .. chan)
+		if self.Dbg:IsLogging() then
+			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Found newer version " .. version .. 
+				" for data from " .. sender .. " in chan " .. chan)
+		end
 		return true
 	end
 	return false
@@ -246,15 +263,19 @@ function Lib:SendMessage(prio,target,content,callback,callbackparam)
 	if target:find(self.Const.VirtChanPrefix,1,true) == 1 then
 		local TargetChan = self:InternToExternChan(target)
 		if TargetChan ~= nil and TargetChan:find(self.Const.VirtChanPrefix,1,true) ~= 1 then
-			self.Dbg:Debug(LOG_LEVEL.DATA,"SendMessage " .. prio .. "," .. TargetChan .. "(" ..
-			  target .. ")," .. content)
+			if self.Dbg:IsLogging() then
+				self.Dbg:Debug(LOG_LEVEL.DATA,"SendMessage " .. prio .. "," .. TargetChan .. "(" ..
+					target .. ")," .. content)
+			end
 			ChatThrottleLib:SendAddonMessage(prio,self.Const.ChatPrefix,content,
 				TargetChan,nil,nil,callback,callbackparam)
 		else
 			error("Called SendMessage with invalid target " .. target .. " translated to " .. TargetChan)
 		end
 	else
-		self.Dbg:Debug(LOG_LEVEL.DATA,"SendMessage " .. prio .. "," .. target .. "," .. content)
+		if self.Dbg:IsLogging() then
+			self.Dbg:Debug(LOG_LEVEL.DATA,"SendMessage " .. prio .. "," .. target .. "," .. content)
+		end
 		ChatThrottleLib:SendChatMessage(prio,self.Const.ChatPrefix,content,"CHANNEL",
 			nil,target,nil,callback,callbackparam)
 	end
@@ -268,14 +289,18 @@ function Lib:AdvertiseVersionAndSendData()
 			local MainChar = self:GetMyMain(chan)
 			if data["Config"]["SendingData"] ~= true and data["Config"]["ResendRequested"] ~= true then
 				if data["Data"][MainChar] == nil then
-					self.Dbg:Debug(LOG_LEVEL.NORMAL,"Don't advertise Version because I don't have any data for " .. MainChar .. ".")
+					if self.Dbg:IsLogging() then
+						self.Dbg:Debug(LOG_LEVEL.NORMAL,"Don't advertise Version because I don't have any data for " .. MainChar .. ".")
+					end
 					error("No own data for chan " .. chan)
 				else
 					assert(data["Data"][MainChar]["Config"]~=nil,"No Config for " .. MainChar .. "!")
 					assert(data["Data"][MainChar]["Config"]["Version"]~=nil,"No Version for " .. MainChar .. "!")
-					self.Dbg:Debug(LOG_LEVEL.NORMAL,"Advertise Verison " .. 
-						data["Data"][MainChar]["Config"]["Version"] ..
-						" to channel " .. chan .. " for " .. MainChar)
+					if self.Dbg:IsLogging() then
+						self.Dbg:Debug(LOG_LEVEL.NORMAL,"Advertise Verison " .. 
+							data["Data"][MainChar]["Config"]["Version"] ..
+							" to channel " .. chan .. " for " .. MainChar)
+					end
 					self:SendMessage("NORMAL",chan,"VER;" .. MainChar .. ";" ..
 						data["Data"][MainChar]["Config"]["Version"])
 				end
@@ -294,12 +319,16 @@ end
 
 function Lib:SendData(chan,user)
 	if self.Db[chan]["Config"]["SendingData"] == true then
-		self.Dbg:Debug(LOG_LEVEL.NORMAL,"Already sending data to channel " .. chan)
+		if self.Dbg:IsLogging() then
+			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Already sending data to channel " .. chan)
+		end
 		return
 	end
 	self.Db[chan]["Config"]["SendingData"] = true
 	local Data = self.Serializer:Serialize(self.Db[chan]["Data"][user]["Data"])
-	self.Dbg:Debug(LOG_LEVEL.NORMAL,"Send to channel " .. chan .. " for user " .. user .. " data " .. Data)
+	if self.Dbg:IsLogging() then
+		self.Dbg:Debug(LOG_LEVEL.NORMAL,"Send to channel " .. chan .. " for user " .. user .. " data " .. Data)
+	end
 	local DataParts = {}
 	local Version = self.Db[chan]["Data"][user]["Config"]["Version"]
 	local Pos = 1
@@ -329,8 +358,10 @@ end
 
 function Lib:StartNewData(chan,sender,version)
 	if self:NewerVersion(chan,sender,version) == false then
-		self.Dbg:Debug(LOG_LEVEL.DATA,"Skip data because already got version " .. version .. 
-		" from " ..	sender .. " in channel " .. chan)
+		if self.Dbg:IsLogging() then
+			self.Dbg:Debug(LOG_LEVEL.DATA,"Skip data because already got version " .. version .. 
+				" from " ..	sender .. " in channel " .. chan)
+		end
 		return
 	end
 	if self.Buffer[chan] == nil then
@@ -339,8 +370,10 @@ function Lib:StartNewData(chan,sender,version)
 	self.Buffer[chan][sender] = {}
 	self.Buffer[chan][sender]["Data"] = ""
 	self.Buffer[chan][sender]["Version"] = version
-	self.Dbg:Debug(LOG_LEVEL.NORMAL,"Start new data for " .. sender .. " in channel " .. chan ..
-		" with version " .. version)
+	if self.Dbg:IsLogging() then
+		self.Dbg:Debug(LOG_LEVEL.NORMAL,"Start new data for " .. sender .. " in channel " .. chan ..
+			" with version " .. version)
+	end
 end
 
 function Lib:NewData(chan,sender,data)
@@ -357,7 +390,7 @@ function Lib:EndNewData(chan,sender)
 	local result,data = self.Serializer:Deserialize(self.Buffer[chan][sender]["Data"])
 	if result ~= true then
 		self.Dbg:Debug(LOG_LEVEL.ERROR,"Can't deserialize string. Error: " .. data ..
-		  " ; Data: ", self.Buffer[chan][sender])
+			" ; Data: ", self.Buffer[chan][sender])
 		error("Can't deserialize string. Error: " .. data)
 		return
 	end
@@ -367,9 +400,11 @@ function Lib:EndNewData(chan,sender)
 			owner = data[self.Const.ConfigVersion]["Main"]
 			self.Db[chan]["Data"][sender] = nil
 		else
-			self.Dbg:Debug(LOG_LEVEL.NORMAL,"Refused to set owner of data to " ..
-				data[self.Const.ConfigVersion]["Main"] .. " because this char doesn't have " ..
-				sender .. " in Twink-List.")
+			if self.Dbg:IsLogging() then
+				self.Dbg:Debug(LOG_LEVEL.NORMAL,"Refused to set owner of data to " ..
+					data[self.Const.ConfigVersion]["Main"] .. " because this char doesn't have " ..
+					sender .. " in Twink-List.")
+			end
 			return
 		end
 	end
@@ -377,9 +412,11 @@ function Lib:EndNewData(chan,sender)
 	self.Db[chan]["Data"][owner]["Data"] = data
 	self.Db[chan]["Data"][owner]["Config"]["Version"] =
 		self.Buffer[chan][sender]["Version"]
-	self.Dbg:Debug(LOG_LEVEL.NORMAL,"Got new version " .. 
-		self.Db[chan]["Data"][owner]["Config"]["Version"] .. " from " .. sender ..
-		" in channel " .. chan .. ": ",data)
+	if self.Dbg:IsLogging() then
+		self.Dbg:Debug(LOG_LEVEL.NORMAL,"Got new version " .. 
+			self.Db[chan]["Data"][owner]["Config"]["Version"] .. " from " .. sender ..
+			" in channel " .. chan .. ": ",data)
+	end
 	self.Buffer[chan][sender] = nil
 	self:CallChangedDataHooks(chan,owner)
 end

@@ -100,7 +100,7 @@ function Lib:Debug(DebugLevel, ...)
 end
 
 function Lib:IsLogging(DebugLevel)
-	return self.DebugLevel >= DebugLevel and LibDbg.DebugChatFrame ~= nil
+	return (DebugLevel == nil or self.DebugLevel >= DebugLevel) and LibDbg.DebugChatFrame ~= nil
 end
 
 function Lib:SearchDebugChatFrame()
