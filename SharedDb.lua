@@ -32,8 +32,8 @@ Lib.Const.ExternToInternChan = {
 Lib.Const.InternToExternChan = {}
 
 Lib.Config = {}
-Lib.Config.SendDataInterval = 15 -- Seconds
-Lib.Config.CleanupInterval = 60
+Lib.Config.SendDataInterval = 150 -- Seconds
+Lib.Config.CleanupInterval = 600
 Lib.Config.MaxStartupDelay = 45
 Lib.Config.TestInitReadyInterval = 1
 
