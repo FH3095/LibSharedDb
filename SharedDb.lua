@@ -633,24 +633,6 @@ function Lib:CreateUserPrefixEntry(chan,user,prefix)
 end
 --]]--
 
-local function deepcopy(object) -- http://lua-users.org/wiki/CopyTable
-	local lookup_table = {}
-	local function _copy(object)
-		if type(object) ~= "table" then
-			return object
-		elseif lookup_table[object] then
-			return lookup_table[object]
-		end
-		local new_table = {}
-		lookup_table[object] = new_table
-		for index, value in pairs(object) do
-			new_table[_copy(index)] = _copy(value)
-		end
-		return new_table
-	end
-	return _copy(object)
-end
-
 function Ext:JoinChannel(chan)
 	Lib:CreateUserEntry(Lib:ExternToInternChan(chan),Lib.Const.SelfPlayerName)
 end
@@ -687,7 +669,7 @@ function Ext:SetData(chan,prefix,data)
 end
 
 function Ext:CopyAndSetData(chan,prefix,data)
-	self:SetData(chan,prefix,deepcopy(data))
+	self:SetData(chan,prefix,self:DeepCopy(data))
 end
 
 function Ext:GetData(chan,user,prefix)
@@ -715,11 +697,11 @@ function Ext:GetChanData(chan,prefix,includeSelf)
 end
 
 function Ext:CopyAndGetData(chan,user,prefix)
-	return deepcopy(self:GetData(chan,user,prefix))
+	return self:DeepCopy(self:GetData(chan,user,prefix))
 end
 
 function Ext:CopyAndGetChanData(chan,prefix,includeSelf)
-	return deepcopy(self:GetChanData(chan,prefix,includeSelf))
+	return self:DeepCopy(self:GetChanData(chan,prefix,includeSelf))
 end
 
 function Ext:SetChangedDataHook(func,param)
@@ -792,7 +774,7 @@ function Ext:GetTwinks(chan)
 	if self:ExistsChannelEntry(TranslatedChan) ~= true then
 		return nil
 	end
-	return deepcopy(Lib.Db[TranslatedChan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"])
+	return self:DeepCopy(Lib.Db[TranslatedChan]["Data"][Lib.Const.SelfPlayerName]["Data"][Lib.Const.ConfigVersion]["Twinks"])
 end
 
 function Ext:DeepCompare(t1,t2,ignoreMetaTable) -- http://snippets.luacode.org/snippets/Deep_Comparison_of_Two_Values_3
@@ -823,6 +805,24 @@ function Ext:DeepCompare(t1,t2,ignoreMetaTable) -- http://snippets.luacode.org/s
 		end
 	end
 	return true
+end
+
+function Ext:DeepCopy(object) -- http://lua-users.org/wiki/CopyTable
+	local lookup_table = {}
+	local function _copy(object)
+		if type(object) ~= "table" then
+			return object
+		elseif lookup_table[object] then
+			return lookup_table[object]
+		end
+		local new_table = {}
+		lookup_table[object] = new_table
+		for index, value in pairs(object) do
+			new_table[_copy(index)] = _copy(value)
+		end
+		return new_table
+	end
+	return _copy(object)
 end
 
 
